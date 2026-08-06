@@ -47,10 +47,11 @@ from .const import (
     CONF_ACCESS_TOKEN_EXPIRES,
     CONF_REFRESH_TOKEN_EXPIRES,
 )
+from .metrics import extract_device_metric_values
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.NUMBER, Platform.SELECT, Platform.SWITCH]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.NUMBER, Platform.SELECT, Platform.SWITCH, Platform.BINARY_SENSOR]
 
 DEVICE_UPDATE_INTERVAL = timedelta(minutes=5)
 STATION_UPDATE_INTERVAL = timedelta(minutes=30)
@@ -271,12 +272,14 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
             settings = await self.hass.async_add_executor_job(
                 self.api.fetch_settings, self.device_id
             )
+            metrics = extract_device_metric_values(self.device_meta)
             return {
                 "time_series": time_series,
                 "settings": settings,
                 "device": self.device_id,
                 "station_id": self.station_id,
                 "device_meta": self.device_meta,
+                "device_metrics": metrics,
             }
         except TokenExpiredError as err:
             _LOGGER.error(

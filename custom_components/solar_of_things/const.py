@@ -65,6 +65,12 @@ SENSOR_KEYS = [
 ]
 
 SENSOR_DEFINITIONS = {
+    "current_generation_power": {
+        "name": "Current Generation Power",
+        "unit": "W",
+        "device_class": "power",
+        "icon": "mdi:solar-power",
+    },
     "pvInputPower": {
         "name": "PV Input Power",
         "unit": "W",
@@ -125,6 +131,38 @@ SENSOR_DEFINITIONS = {
         "device_class": "power",
         "icon": "mdi:home-lightning-bolt",
     },
+    "device_online": {
+        "name": "Device Online",
+        "icon": "mdi:connection",
+    },
+    "device_state": {
+        "name": "Device State",
+        "icon": "mdi:information-outline",
+    },
+    "today_pv_generated": {
+        "name": "Today PV Generated",
+        "unit": "kWh",
+        "device_class": "energy",
+        "icon": "mdi:solar-power",
+    },
+    "monthly_pv_generated_device": {
+        "name": "Monthly PV Generated",
+        "unit": "kWh",
+        "device_class": "energy",
+        "icon": "mdi:solar-power",
+    },
+    "yearly_pv_generated": {
+        "name": "Yearly PV Generated",
+        "unit": "kWh",
+        "device_class": "energy",
+        "icon": "mdi:solar-power",
+    },
+    "total_pv_generated": {
+        "name": "Total PV Generated",
+        "unit": "kWh",
+        "device_class": "energy",
+        "icon": "mdi:solar-power",
+    },
     # Monthly summary sensors
     "monthly_pv_generated": {
         "name": "Monthly PV Generated",
@@ -148,5 +186,17 @@ SENSOR_DEFINITIONS = {
         "name": "Monthly Solar Coverage",
         "unit": "%",
         "icon": "mdi:percent",
+    },
+    "monthly_load_estimate": {
+        "name": "Monthly Load Estimate",
+        "unit": "kWh",
+        "device_class": "energy",
+        "icon": "mdi:home-lightning-bolt",
+    },
+    "yearly_load_estimate": {
+        "name": "Yearly Load Estimate",
+        "unit": "kWh",
+        "device_class": "energy",
+        "icon": "mdi:home-lightning-bolt",
     },
 }

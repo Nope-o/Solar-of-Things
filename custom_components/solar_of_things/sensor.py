@@ -17,6 +17,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, SENSOR_DEFINITIONS
+from .metrics import extract_device_metric_values
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +37,15 @@ _TRANSLATION_KEYS: dict[str, str] = {
     "monthly_grid_import": "monthly_grid_import",
     "monthly_total_consumption": "monthly_total_consumption",
     "monthly_solar_percentage": "monthly_solar_percentage",
+    "monthly_load_estimate": "monthly_load_estimate",
+    "yearly_load_estimate": "yearly_load_estimate",
+    "current_generation_power": "current_generation_power",
+    "device_online": "device_online",
+    "device_state": "device_state",
+    "today_pv_generated": "today_pv_generated",
+    "monthly_pv_generated_device": "monthly_pv_generated_device",
+    "yearly_pv_generated": "yearly_pv_generated",
+    "total_pv_generated": "total_pv_generated",
 }
 
 
@@ -58,7 +68,7 @@ async def async_setup_entry(
         device_name = (coordinator.device_meta or {}).get("name") or device_id
 
         for key, definition in SENSOR_DEFINITIONS.items():
-            if key.startswith("monthly_"):
+            if key.startswith("monthly_") or key.startswith("yearly_"):
                 continue
 
             entities.append(
@@ -75,7 +85,7 @@ async def async_setup_entry(
     # Station-level monthly sensors
     if station_coordinator:
         for key, definition in SENSOR_DEFINITIONS.items():
-            if not key.startswith("monthly_"):
+            if not key.startswith("monthly_") and not key.startswith("yearly_"):
                 continue
 
             entities.append(
@@ -153,6 +163,39 @@ class SolarOfThingsDeviceSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self):
+        device_metrics = (self.coordinator.data or {}).get("device_metrics") or {}
+        if self._sensor_key == "device_online":
+            return device_metrics.get("online")
+        if self._sensor_key == "device_state":
+            return device_metrics.get("device_state")
+        if self._sensor_key == "current_generation_power":
+            val = device_metrics.get("current_generation_power_w")
+            if val is not None:
+                return round(float(val), 2)
+
+        monthly = (self.coordinator.data or {}).get("monthly") or {}
+        if self._sensor_key in monthly:
+            val = monthly.get(self._sensor_key)
+            if val is not None:
+                return round(float(val), 2)
+
+        if self._sensor_key == "today_pv_generated":
+            val = device_metrics.get("today_pv_generated_kwh")
+            if val is not None:
+                return round(float(val), 2)
+        if self._sensor_key == "monthly_pv_generated_device":
+            val = device_metrics.get("monthly_pv_generated_kwh")
+            if val is not None:
+                return round(float(val), 2)
+        if self._sensor_key == "yearly_pv_generated":
+            val = device_metrics.get("yearly_pv_generated_kwh")
+            if val is not None:
+                return round(float(val), 2)
+        if self._sensor_key == "total_pv_generated":
+            val = device_metrics.get("total_pv_generated_kwh")
+            if val is not None:
+                return round(float(val), 2)
+
         ts = (self.coordinator.data or {}).get("time_series") or {}
         val = ts.get(self._sensor_key)
         if val is None:

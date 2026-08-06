@@ -659,10 +659,9 @@ class SolarOfThingsAPI:
     # ─── Monthly summary (station) ─────────────────────────────────────────────
 
     def fetch_monthly_summary(self, station_id: str) -> dict[str, Any]:
-        """Fetch monthly PV summary for the current month."""
+        """Fetch monthly PV summary for the current month and derive load estimates."""
         now = self._now()
         year = now.year
-        month_key = f"{year}-{str(now.month).zfill(2)}"
 
         self._ensure_token_valid()
         resp = self.session.post(
@@ -680,27 +679,16 @@ class SolarOfThingsAPI:
                 f"message={data.get('message')}"
             )
 
-        props = (((data.get("data") or {}).get("properties")) or
-                 (data.get("data") or {}).get("list") or
-                 [])
+        from .metrics import extract_history_metrics
 
-        result: dict[str, Any] = {}
-        for item in props if isinstance(props, list) else []:
-            k = item.get("key") or item.get("name")
-            v = item.get("value")
-            if k and v is not None:
-                result[k] = v
+        history_metrics = extract_history_metrics(data, year=year)
 
-        # Extract monthly totals (fallback: look for known keys)
         monthly: dict[str, Any] = {}
-        pv_total = result.get(month_key) or result.get("pvTotal") or result.get("pv") or 0
-        monthly["monthly_pv_generated"] = float(pv_total or 0)
-
-        grid_import = result.get("gridImport") or result.get("buy") or 0
-        monthly["monthly_grid_import"] = float(grid_import or 0)
-
-        total_consumption = result.get("totalConsumption") or result.get("load") or 0
-        monthly["monthly_total_consumption"] = float(total_consumption or 0)
+        monthly["monthly_pv_generated"] = history_metrics.get("monthly_pv_generated") or 0.0
+        monthly["monthly_grid_import"] = history_metrics.get("monthly_grid_import") or 0.0
+        monthly["monthly_energy_sold"] = history_metrics.get("monthly_energy_sold") or 0.0
+        monthly["monthly_load_estimate"] = history_metrics.get("monthly_load_estimate") or 0.0
+        monthly["monthly_total_consumption"] = monthly["monthly_load_estimate"]
 
         if monthly["monthly_total_consumption"] > 0:
             monthly["monthly_solar_percentage"] = round(
@@ -708,6 +696,11 @@ class SolarOfThingsAPI:
             )
         else:
             monthly["monthly_solar_percentage"] = 0.0
+
+        monthly["yearly_pv_generated"] = history_metrics.get("yearly_pv_generated") or 0.0
+        monthly["yearly_grid_import"] = history_metrics.get("yearly_grid_import") or 0.0
+        monthly["yearly_energy_sold"] = history_metrics.get("yearly_energy_sold") or 0.0
+        monthly["yearly_load_estimate"] = history_metrics.get("yearly_load_estimate") or 0.0
 
         return monthly
 

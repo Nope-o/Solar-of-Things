@@ -33,12 +33,20 @@ _TRANSLATION_KEYS: dict[str, str] = {
     "feedInPower": "feed_in_power",
     "gridPower": "grid_power",
     "loadPower": "load_power",
+    "daily_grid_import": "daily_grid_import",
+    "daily_grid_export": "daily_grid_export",
+    "daily_grid_net": "daily_grid_net",
     "monthly_pv_generated": "monthly_pv_generated",
     "monthly_grid_import": "monthly_grid_import",
+    "monthly_grid_export": "monthly_grid_export",
+    "monthly_grid_net": "monthly_grid_net",
     "monthly_total_consumption": "monthly_total_consumption",
     "monthly_solar_percentage": "monthly_solar_percentage",
     "monthly_load_estimate": "monthly_load_estimate",
     "yearly_load_estimate": "yearly_load_estimate",
+    "yearly_grid_import": "yearly_grid_import",
+    "yearly_grid_export": "yearly_grid_export",
+    "yearly_grid_net": "yearly_grid_net",
     "current_generation_power": "current_generation_power",
     "device_online": "device_online",
     "device_state": "device_state",
@@ -85,7 +93,7 @@ async def async_setup_entry(
     # Station-level monthly sensors
     if station_coordinator:
         for key, definition in SENSOR_DEFINITIONS.items():
-            if not key.startswith("monthly_") and not key.startswith("yearly_"):
+            if not key.startswith(("daily_", "monthly_", "yearly_")):
                 continue
 
             entities.append(
@@ -183,6 +191,14 @@ class SolarOfThingsDeviceSensor(CoordinatorEntity, SensorEntity):
             val = device_metrics.get("today_pv_generated_kwh")
             if val is not None:
                 return round(float(val), 2)
+        if self._sensor_key == "batterySOC":
+            # Prefer device-reported SOC if present
+            val = device_metrics.get("battery_soc_percent")
+            if val is not None:
+                try:
+                    return round(float(val), 1)
+                except Exception:
+                    return None
         if self._sensor_key == "monthly_pv_generated_device":
             val = device_metrics.get("monthly_pv_generated_kwh")
             if val is not None:
@@ -196,14 +212,92 @@ class SolarOfThingsDeviceSensor(CoordinatorEntity, SensorEntity):
             if val is not None:
                 return round(float(val), 2)
 
+        if self._sensor_key == "batteryVoltage":
+            # Prefer device metric voltage (V) if available, else time-series
+            val = device_metrics.get("battery_voltage_v")
+            if val is not None:
+                try:
+                    return round(float(val), 1)
+                except Exception:
+                    return None
+
         ts = (self.coordinator.data or {}).get("time_series") or {}
         val = ts.get(self._sensor_key)
         if val is None:
-            return None
+            if self._sensor_key == "pvInputPower":
+                val = device_metrics.get("pv_input_power_w")
+            elif self._sensor_key == "loadPower":
+                val = device_metrics.get("load_power_w")
+            elif self._sensor_key == "gridPower":
+                val = device_metrics.get("grid_power_w")
+            if val is None:
+                return None
         try:
+            # Use 1 decimal for voltage, 2 decimals otherwise
+            if self._sensor_key == "batteryVoltage":
+                return round(float(val), 1)
+            if self._sensor_key == "batterySOC":
+                return round(float(val), 1)
             return round(float(val), 2)
         except Exception:
             return None
+
+    @property
+    def available(self) -> bool:
+        """Return True if the sensor has a meaningful value to show."""
+        data = self.coordinator.data or {}
+        device_metrics = data.get("device_metrics") or {}
+        monthly = data.get("monthly") or {}
+        ts = data.get("time_series") or {}
+
+        # Device-level simple keys
+        if self._sensor_key == "device_online":
+            return device_metrics.get("online") is not None
+        if self._sensor_key == "device_state":
+            return device_metrics.get("device_state") is not None
+
+        # Current generation power: available if device metric or time-series present
+        if self._sensor_key == "current_generation_power":
+            if device_metrics.get("current_generation_power_w") is not None:
+                return True
+            return ts.get("current_generation_power") is not None
+        if self._sensor_key == "pvInputPower":
+            if device_metrics.get("pv_input_power_w") is not None:
+                return True
+            return ts.get("pvInputPower") is not None
+        if self._sensor_key == "loadPower":
+            if device_metrics.get("load_power_w") is not None:
+                return True
+            return ts.get("loadPower") is not None
+        if self._sensor_key == "gridPower":
+            if device_metrics.get("grid_power_w") is not None:
+                return True
+            return ts.get("gridPower") is not None
+        if self._sensor_key == "batteryVoltage":
+            if device_metrics.get("battery_voltage_v") is not None:
+                return True
+            return ts.get("batteryVoltage") is not None
+        if self._sensor_key == "batterySOC":
+            if device_metrics.get("battery_soc_percent") is not None:
+                return True
+            return ts.get("batterySOC") is not None
+
+        # Monthly/station-derived sensors
+        if self._sensor_key in monthly:
+            return monthly.get(self._sensor_key) is not None
+
+        # Device-side totals
+        if self._sensor_key == "today_pv_generated":
+            return device_metrics.get("today_pv_generated_kwh") is not None
+        if self._sensor_key == "monthly_pv_generated_device":
+            return device_metrics.get("monthly_pv_generated_kwh") is not None
+        if self._sensor_key == "yearly_pv_generated":
+            return device_metrics.get("yearly_pv_generated_kwh") is not None
+        if self._sensor_key == "total_pv_generated":
+            return device_metrics.get("total_pv_generated_kwh") is not None
+
+        # Fallback to time-series presence
+        return ts.get(self._sensor_key) is not None
 
 
 class SolarOfThingsStationMonthlySensor(CoordinatorEntity, SensorEntity):
@@ -257,3 +351,9 @@ class SolarOfThingsStationMonthlySensor(CoordinatorEntity, SensorEntity):
             return round(float(val), 2)
         except Exception:
             return None
+
+    @property
+    def available(self) -> bool:
+        """Station-level monthly sensors are available only when monthly data exists."""
+        monthly = (self.coordinator.data or {}).get("monthly") or {}
+        return monthly.get(self._sensor_key) is not None

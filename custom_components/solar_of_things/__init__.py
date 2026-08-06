@@ -25,7 +25,7 @@ Version history
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -53,8 +53,9 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.NUMBER, Platform.SELECT, Platform.SWITCH, Platform.BINARY_SENSOR]
 
-DEVICE_UPDATE_INTERVAL = timedelta(minutes=5)
-STATION_UPDATE_INTERVAL = timedelta(minutes=30)
+DEVICE_UPDATE_INTERVAL = timedelta(seconds=15)
+STATION_UPDATE_INTERVAL = timedelta(minutes=5)
+SETTINGS_REFRESH_INTERVAL = timedelta(minutes=5)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -257,6 +258,8 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
         self.device_id = device
         self.device_meta = device_meta
         self._entry = entry
+        self._settings_cache: dict[str, Any] = {}
+        self._settings_cache_updated_at: datetime | None = None
         super().__init__(
             hass,
             _LOGGER,
@@ -269,9 +272,17 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
             time_series = await self.hass.async_add_executor_job(
                 self.api.fetch_latest_data, self.device_id
             )
-            settings = await self.hass.async_add_executor_job(
-                self.api.fetch_settings, self.device_id
-            )
+            now = datetime.now(timezone.utc)
+            settings = self._settings_cache
+            if (
+                self._settings_cache_updated_at is None
+                or (now - self._settings_cache_updated_at) >= SETTINGS_REFRESH_INTERVAL
+            ):
+                settings = await self.hass.async_add_executor_job(
+                    self.api.fetch_settings, self.device_id
+                )
+                self._settings_cache = settings
+                self._settings_cache_updated_at = now
             metrics = extract_device_metric_values(self.device_meta)
             return {
                 "time_series": time_series,

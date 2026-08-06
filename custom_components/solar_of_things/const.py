@@ -37,6 +37,8 @@ IOT_APP_SECRET_ENC  = "I4D0KRr2339z3pQ/at91V9BpFAOe54DaTafwSm6suIQ="
 
 # ─── Data endpoints ────────────────────────────────────────────────────────────
 API_TIME_SERIES    = "/apis/deviceState/simple/attribute/keys/history/v1"
+API_STATE_LATEST   = "/apis/deviceState/simple/state/latest/v1"
+API_ENERGY_FLOW    = "/apis/deviceState/simple/energy/flow/v1"
 API_MONTHLY_SUMMARY = "/apis/stationOverView/stateAttributeSummary/category/yearly"
 # Remote device config endpoints (discovered 2026-03-07 from live API testing).
 # These accept a plain IOT-Token header (no IOT-Open-Sign) and use the device ID
@@ -170,11 +172,41 @@ SENSOR_DEFINITIONS = {
         "device_class": "energy",
         "icon": "mdi:solar-power",
     },
+    "daily_grid_import": {
+        "name": "Daily Grid Import",
+        "unit": "kWh",
+        "device_class": "energy",
+        "icon": "mdi:transmission-tower-import",
+    },
+    "daily_grid_export": {
+        "name": "Daily Grid Export",
+        "unit": "kWh",
+        "device_class": "energy",
+        "icon": "mdi:transmission-tower-export",
+    },
+    "daily_grid_net": {
+        "name": "Daily Grid Net",
+        "unit": "kWh",
+        "device_class": "energy",
+        "icon": "mdi:transmission-tower",
+    },
     "monthly_grid_import": {
         "name": "Monthly Grid Import",
         "unit": "kWh",
         "device_class": "energy",
         "icon": "mdi:transmission-tower-import",
+    },
+    "monthly_grid_export": {
+        "name": "Monthly Grid Export",
+        "unit": "kWh",
+        "device_class": "energy",
+        "icon": "mdi:transmission-tower-export",
+    },
+    "monthly_grid_net": {
+        "name": "Monthly Grid Net",
+        "unit": "kWh",
+        "device_class": "energy",
+        "icon": "mdi:transmission-tower",
     },
     "monthly_total_consumption": {
         "name": "Monthly Total Consumption",
@@ -198,5 +230,23 @@ SENSOR_DEFINITIONS = {
         "unit": "kWh",
         "device_class": "energy",
         "icon": "mdi:home-lightning-bolt",
+    },
+    "yearly_grid_import": {
+        "name": "Yearly Grid Import",
+        "unit": "kWh",
+        "device_class": "energy",
+        "icon": "mdi:transmission-tower-import",
+    },
+    "yearly_grid_export": {
+        "name": "Yearly Grid Export",
+        "unit": "kWh",
+        "device_class": "energy",
+        "icon": "mdi:transmission-tower-export",
+    },
+    "yearly_grid_net": {
+        "name": "Yearly Grid Net",
+        "unit": "kWh",
+        "device_class": "energy",
+        "icon": "mdi:transmission-tower",
     },
 }

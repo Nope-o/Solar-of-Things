@@ -87,6 +87,8 @@ from .const import (
     API_LOGIN,
     API_REFRESH_TOKEN as API_REFRESH_TOKEN_ENDPOINT,
     API_TIME_SERIES,
+    API_STATE_LATEST,
+    API_ENERGY_FLOW,
     API_MONTHLY_SUMMARY,
     API_DEVICE_LIST,
     API_SETTINGS_GET,
@@ -206,6 +208,160 @@ def _parse_expiry(value: str | None) -> datetime | None:
         return dt.astimezone(timezone.utc)
     except Exception:
         return None
+
+
+def _latest_non_null(values: Any) -> Any | None:
+    """Return the newest non-null value from a time-series field array."""
+    if not isinstance(values, list):
+        return None
+    for value in reversed(values):
+        if value is not None:
+            return value
+    return None
+
+
+def _scale_kw_power(value: Any) -> Any:
+    """Convert a kW power reading to W when the source key is known to be kW."""
+    try:
+        return float(value) * 1000.0
+    except (TypeError, ValueError):
+        return value
+
+
+def _extract_latest_fields(
+    payload: dict[str, Any],
+    *,
+    aliases: dict[str, tuple[str, bool]] | None = None,
+) -> dict[str, Any]:
+    """Flatten the latest non-null field values from a time-series payload."""
+    payload_data = (payload.get("data") or {}).get("payload") or {}
+    fields = payload_data.get("fields") or {}
+
+    latest_values: dict[str, Any] = {}
+    for raw_key, arr in fields.items():
+        value = _latest_non_null(arr)
+        if value is None:
+            continue
+
+        key = raw_key
+        scale_kw = False
+        if aliases and raw_key in aliases:
+            key, scale_kw = aliases[raw_key]
+
+        if scale_kw:
+            value = _scale_kw_power(value)
+
+        latest_values[key] = value
+
+    return latest_values
+
+
+def _extract_unit_value(payload: Any) -> float | None:
+    """Extract a numeric value from either a flow block or a field payload."""
+    if not isinstance(payload, dict):
+        return None
+
+    value_payload = payload.get("value")
+    if isinstance(value_payload, dict):
+        raw_value = value_payload.get("value")
+        unit = value_payload.get("unit")
+    else:
+        raw_value = payload.get("value")
+        unit = payload.get("unit")
+
+    try:
+        numeric = float(raw_value)
+    except (TypeError, ValueError):
+        return None
+
+    if unit == "kW":
+        numeric *= 1000.0
+    return numeric
+
+
+def _extract_energy_flow_values(payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the mobile-app energy-flow payload into sensor-style keys."""
+    data = payload.get("data") or {}
+    fields = ((data.get("deviceAttributeState") or {}).get("fields") or {})
+    values: dict[str, Any] = {}
+
+    pv_value = _extract_unit_value(data.get("pvPanelFlow"))
+    if pv_value is not None:
+        values["pvInputPower"] = pv_value
+
+    load_value = _extract_unit_value(data.get("loadFlow"))
+    if load_value is not None:
+        values["loadPower"] = load_value
+        values["acOutputActivePower"] = load_value
+
+    battery_voltage = _extract_unit_value(data.get("batteryFlow"))
+    if battery_voltage is not None:
+        values["batteryVoltage"] = battery_voltage
+
+    values.update(_extract_state_field_values(fields))
+
+    if "loadPower" in values:
+        values.setdefault("acOutputActivePower", values["loadPower"])
+
+    grid_section = data.get("gridFlow") or {}
+    grid_value = _extract_unit_value(grid_section)
+    if grid_value is not None:
+        if grid_section.get("flowDirection") == 2:
+            values["feedInPower"] = grid_value
+            values["gridPower"] = 0.0
+        else:
+            values["gridPower"] = grid_value
+            values.setdefault("feedInPower", 0.0)
+
+    return values
+
+
+def _extract_state_field_values(fields: dict[str, Any]) -> dict[str, Any]:
+    """Map latest-state field payloads into sensor-style keys."""
+    values: dict[str, Any] = {}
+
+    field_mappings: tuple[tuple[str, str], ...] = (
+        ("batteryChargingCurrent", "batteryChargingCurrent"),
+        ("batteryDischargeCurrent", "batteryDischargeCurrent"),
+        ("batteryVoltage", "batteryVoltage"),
+        ("generationPower", "pvInputPower"),
+        ("pvPower", "pvInputPower"),
+        ("mainsPower", "gridPower"),
+        ("outputActivePower", "loadPower"),
+    )
+    for field_key, target_key in field_mappings:
+        numeric = _extract_unit_value(fields.get(field_key))
+        if numeric is not None:
+            values[target_key] = numeric
+
+    if "loadPower" in values:
+        values.setdefault("acOutputActivePower", values["loadPower"])
+
+    for soc_key in ("batteryCapacity", "bmsCurrentSOC"):
+        numeric = _extract_unit_value(fields.get(soc_key))
+        if numeric is not None:
+            values["batterySOC"] = numeric
+            break
+
+    flow_direction = fields.get("mainsCurrentFlowDirection")
+    if isinstance(flow_direction, dict):
+        direction_value = str(flow_direction.get("value") or "")
+        direction_display = str(flow_direction.get("valueDisplay") or "").lower()
+        if values.get("gridPower") is not None:
+            if direction_value == "-" or "inverter to mains" in direction_display:
+                values["feedInPower"] = values["gridPower"]
+                values["gridPower"] = 0.0
+            elif direction_value == "+" or "mains to inverter" in direction_display:
+                values.setdefault("feedInPower", 0.0)
+
+    return values
+
+
+def _extract_latest_state_values(payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the latest-state payload into sensor-style keys."""
+    data = payload.get("data") or {}
+    fields = data.get("fields") or {}
+    return _extract_state_field_values(fields)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -589,21 +745,60 @@ class SolarOfThingsAPI:
 
     # ─── Time-series (per device) ──────────────────────────────────────────────
 
-    def fetch_latest_data(self, device_id: str) -> dict[str, Any]:
-        """Fetch the latest readings for a device (last 1 hour)."""
-        end_time = self._now()
-        start_time = end_time - timedelta(hours=1)
+    def fetch_energy_flow(self, device_id: str) -> dict[str, Any]:
+        """Fetch live flow values from the same endpoint used by the mobile app."""
+        self._ensure_token_valid()
+        url = f"{API_BASE_URL}{API_ENERGY_FLOW}?deviceId={device_id}"
+        resp = self.session.get(url, timeout=30)
 
-        keys = [
-            "pvInputPower",
-            "acOutputActivePower",
-            "batteryDischargeCurrent",
-            "batteryChargingCurrent",
-            "batteryVoltage",
-            "feedInPower",
-            "batterySOC",
-        ]
+        if resp.status_code == 401:
+            _LOGGER.warning("SolarOfThings: energy-flow request got 401; forcing token refresh")
+            self._access_expires = None
+            self._ensure_token_valid()
+            resp = self.session.get(url, timeout=30)
 
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("code") not in (0, None):
+            raise RuntimeError(
+                f"Energy flow error code={data.get('code')} "
+                f"message={data.get('message')}"
+            )
+
+        return _extract_energy_flow_values(data)
+
+    def fetch_latest_state(self, device_id: str) -> dict[str, Any]:
+        """Fetch the latest raw device-state fields as a live-data fallback."""
+        self._ensure_token_valid()
+        url = f"{API_BASE_URL}{API_STATE_LATEST}?deviceId={device_id}"
+        resp = self.session.get(url, timeout=30)
+
+        if resp.status_code == 401:
+            _LOGGER.warning("SolarOfThings: latest-state request got 401; forcing token refresh")
+            self._access_expires = None
+            self._ensure_token_valid()
+            resp = self.session.get(url, timeout=30)
+
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("code") not in (0, None):
+            raise RuntimeError(
+                f"Latest state error code={data.get('code')} "
+                f"message={data.get('message')}"
+            )
+
+        return _extract_latest_state_values(data)
+
+    def _fetch_time_series_values(
+        self,
+        device_id: str,
+        start_time: datetime,
+        end_time: datetime,
+        keys: list[str],
+        *,
+        aliases: dict[str, tuple[str, bool]] | None = None,
+    ) -> dict[str, Any]:
+        """Fetch time-series values and flatten them to the latest non-null sample."""
         data = self._post(
             API_TIME_SERIES,
             {
@@ -623,36 +818,125 @@ class SolarOfThingsAPI:
                 f"message={data.get('message')}"
             )
 
-        payload_data = (data.get("data") or {}).get("payload") or {}
-        fields = payload_data.get("fields") or {}
+        return _extract_latest_fields(data, aliases=aliases)
 
+    def fetch_latest_data(self, device_id: str) -> dict[str, Any]:
+        """Fetch the latest readings for a device (last 1 hour)."""
+        end_time = self._now()
+        start_time = end_time - timedelta(hours=1)
         latest_values: dict[str, Any] = {}
-        for key, arr in fields.items():
-            if isinstance(arr, list) and arr:
-                latest_values[key] = arr[-1]
+        core_live_keys = (
+            "pvInputPower",
+            "acOutputActivePower",
+            "batteryDischargeCurrent",
+            "batteryChargingCurrent",
+            "batteryVoltage",
+            "feedInPower",
+            "batterySOC",
+            "gridPower",
+            "loadPower",
+        )
 
-        # Unit normalisation: acOutputActivePower is kW in API → W
-        if "acOutputActivePower" in latest_values:
+        try:
+            latest_values.update(self.fetch_energy_flow(device_id))
+        except Exception as err:
+            _LOGGER.debug(
+                "SolarOfThings: energy-flow fetch failed for %s: %s",
+                device_id,
+                err,
+            )
+
+        if any(key not in latest_values for key in core_live_keys):
             try:
-                latest_values["acOutputActivePower"] = (
-                    float(latest_values["acOutputActivePower"]) * 1000.0
+                latest_state_values = self.fetch_latest_state(device_id)
+            except Exception as err:
+                _LOGGER.debug(
+                    "SolarOfThings: latest-state fetch failed for %s: %s",
+                    device_id,
+                    err,
                 )
-            except Exception:
-                pass
+            else:
+                for key, value in latest_state_values.items():
+                    latest_values.setdefault(key, value)
+
+        primary_keys = [
+            "pvInputPower",
+            "acOutputActivePower",
+            "batteryDischargeCurrent",
+            "batteryChargingCurrent",
+            "batteryVoltage",
+            "feedInPower",
+            "batterySOC",
+        ]
+
+        if any(key not in latest_values for key in core_live_keys):
+            time_series_values = self._fetch_time_series_values(
+                device_id,
+                start_time,
+                end_time,
+                primary_keys,
+                aliases={"acOutputActivePower": ("acOutputActivePower", True)},
+            )
+            for key, value in time_series_values.items():
+                latest_values.setdefault(key, value)
+
+        alt_key_aliases: dict[str, tuple[str, bool]] = {
+            "generationPower": ("pvInputPower", True),
+            "acOutputPower": ("acOutputActivePower", True),
+            "loadPower": ("loadPower", True),
+            "gridPower": ("gridPower", True),
+            "powerGrid": ("gridPower", True),
+            "batterySoc": ("batterySOC", False),
+        }
+
+        needs_fallback_probe = any(
+            key not in latest_values
+            for key in ("pvInputPower", "acOutputActivePower", "loadPower", "gridPower")
+        )
+        if needs_fallback_probe:
+            try:
+                alt_values = self._fetch_time_series_values(
+                    device_id,
+                    start_time,
+                    end_time,
+                    list(alt_key_aliases),
+                    aliases=alt_key_aliases,
+                )
+            except Exception as err:
+                _LOGGER.debug(
+                    "SolarOfThings: fallback live-key probe failed for %s: %s",
+                    device_id,
+                    err,
+                )
+            else:
+                for key, value in alt_values.items():
+                    latest_values.setdefault(key, value)
 
         # Derived values
-        voltage = float(latest_values.get("batteryVoltage") or 0)
-        discharge = float(latest_values.get("batteryDischargeCurrent") or 0)
-        charge = float(latest_values.get("batteryChargingCurrent") or 0)
-        latest_values["batteryPower"] = (discharge - charge) * voltage
+        try:
+            voltage = float(latest_values.get("batteryVoltage") or 0)
+            discharge = float(latest_values.get("batteryDischargeCurrent") or 0)
+            charge = float(latest_values.get("batteryChargingCurrent") or 0)
+            latest_values["batteryPower"] = (discharge - charge) * voltage
+        except (TypeError, ValueError):
+            pass
 
-        pv_power = float(latest_values.get("pvInputPower") or 0)
-        ac_output = float(latest_values.get("acOutputActivePower") or 0)
-        feed_in = float(latest_values.get("feedInPower") or 0)
-        battery_power = float(latest_values.get("batteryPower") or 0)
+        try:
+            pv_power = float(latest_values.get("pvInputPower") or 0)
+            ac_output = float(latest_values.get("acOutputActivePower") or 0)
+            feed_in = float(latest_values.get("feedInPower") or 0)
+            battery_power = float(latest_values.get("batteryPower") or 0)
+        except (TypeError, ValueError):
+            pv_power = 0.0
+            ac_output = 0.0
+            feed_in = 0.0
+            battery_power = 0.0
 
-        latest_values["gridPower"] = max(0.0, ac_output - pv_power + battery_power + feed_in)
-        latest_values["loadPower"] = ac_output
+        latest_values.setdefault("loadPower", ac_output)
+        latest_values.setdefault(
+            "gridPower",
+            max(0.0, ac_output - pv_power + battery_power + feed_in),
+        )
 
         return latest_values
 
@@ -684,23 +968,30 @@ class SolarOfThingsAPI:
         history_metrics = extract_history_metrics(data, year=year)
 
         monthly: dict[str, Any] = {}
-        monthly["monthly_pv_generated"] = history_metrics.get("monthly_pv_generated") or 0.0
-        monthly["monthly_grid_import"] = history_metrics.get("monthly_grid_import") or 0.0
-        monthly["monthly_energy_sold"] = history_metrics.get("monthly_energy_sold") or 0.0
-        monthly["monthly_load_estimate"] = history_metrics.get("monthly_load_estimate") or 0.0
+        monthly["monthly_pv_generated"] = history_metrics.get("monthly_pv_generated")
+        monthly["monthly_grid_import"] = history_metrics.get("monthly_grid_import")
+        monthly["monthly_grid_export"] = history_metrics.get("monthly_grid_export")
+        monthly["monthly_grid_net"] = history_metrics.get("monthly_grid_net")
+        monthly["daily_grid_import"] = history_metrics.get("daily_grid_import")
+        monthly["daily_grid_export"] = history_metrics.get("daily_grid_export")
+        monthly["daily_grid_net"] = history_metrics.get("daily_grid_net")
+        monthly["monthly_energy_sold"] = history_metrics.get("monthly_energy_sold")
+        monthly["monthly_load_estimate"] = history_metrics.get("monthly_load_estimate")
         monthly["monthly_total_consumption"] = monthly["monthly_load_estimate"]
 
-        if monthly["monthly_total_consumption"] > 0:
+        if monthly["monthly_total_consumption"] is not None and monthly["monthly_total_consumption"] > 0:
             monthly["monthly_solar_percentage"] = round(
-                100.0 * monthly["monthly_pv_generated"] / monthly["monthly_total_consumption"], 1
+                100.0 * (monthly["monthly_pv_generated"] or 0.0) / monthly["monthly_total_consumption"], 1
             )
         else:
-            monthly["monthly_solar_percentage"] = 0.0
+            monthly["monthly_solar_percentage"] = None
 
-        monthly["yearly_pv_generated"] = history_metrics.get("yearly_pv_generated") or 0.0
-        monthly["yearly_grid_import"] = history_metrics.get("yearly_grid_import") or 0.0
-        monthly["yearly_energy_sold"] = history_metrics.get("yearly_energy_sold") or 0.0
-        monthly["yearly_load_estimate"] = history_metrics.get("yearly_load_estimate") or 0.0
+        monthly["yearly_pv_generated"] = history_metrics.get("yearly_pv_generated")
+        monthly["yearly_grid_import"] = history_metrics.get("yearly_grid_import")
+        monthly["yearly_grid_export"] = history_metrics.get("yearly_grid_export")
+        monthly["yearly_grid_net"] = history_metrics.get("yearly_grid_net")
+        monthly["yearly_energy_sold"] = history_metrics.get("yearly_energy_sold")
+        monthly["yearly_load_estimate"] = history_metrics.get("yearly_load_estimate")
 
         return monthly
 
@@ -723,6 +1014,28 @@ class SolarOfThingsAPI:
                 f"message={data.get('message')} (key={key})"
             )
 
+    def _normalize_settings(self, raw: Any) -> dict[str, Any]:
+        """Normalize device settings payload into a dict by key."""
+        if isinstance(raw, dict):
+            if "list" in raw and isinstance(raw["list"], list):
+                raw = raw["list"]
+            elif "data" in raw and isinstance(raw["data"], list):
+                raw = raw["data"]
+            else:
+                return raw
+
+        if isinstance(raw, list):
+            normalized: dict[str, Any] = {}
+            for entry in raw:
+                if not isinstance(entry, dict):
+                    continue
+                key = entry.get("key") or entry.get("settingKey")
+                if key:
+                    normalized[str(key)] = entry
+            return normalized
+
+        return {}
+
     def get_device_settings(self, device_id: str) -> dict[str, Any]:
         """Fetch the cached device settings from the remote config API.
 
@@ -740,7 +1053,7 @@ class SolarOfThingsAPI:
                 f"Settings fetch error code={data.get('code')} "
                 f"message={data.get('message')}"
             )
-        return data.get("data") or {}
+        return self._normalize_settings(data.get("data"))
 
     # Alias used by the coordinator in __init__.py
     fetch_settings = get_device_settings

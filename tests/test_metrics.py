@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import importlib.util
 import unittest
+from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "custom_components" / "solar_of_things" / "metrics.py"
@@ -39,7 +41,38 @@ class MetricsParsingTests(unittest.TestCase):
         self.assertEqual(values["total_pv_generated_kwh"], 754.8)
         self.assertEqual(values["total_generated_energy_kwh"], 741.604)
 
+    def test_extracts_best_effort_live_power_fallbacks(self) -> None:
+        device_meta = {
+            "pvInputPowerReadDirectly": {
+                "key": "generationPower",
+                "unit": "kW",
+                "value": 0.5,
+            },
+            "loadPowerReadDirectly": {
+                "key": "loadPower",
+                "unit": "kW",
+                "value": 0.133,
+            },
+            "gridPowerReadDirectly": {
+                "key": "gridPower",
+                "unit": "kW",
+                "value": 0.161,
+            },
+            "batteryVoltageReadDirectly": {"value": 27.2},
+            "batterySocReadDirectly": {"value": 74},
+        }
+
+        values = extract_device_metric_values(device_meta)
+
+        self.assertEqual(values["pv_input_power_w"], 500.0)
+        self.assertEqual(values["load_power_w"], 133.0)
+        self.assertEqual(values["grid_power_w"], 161.0)
+        self.assertEqual(values["battery_voltage_v"], 27.2)
+        self.assertEqual(values["battery_soc_percent"], 74.0)
+
     def test_extracts_monthly_and_yearly_load_estimates_from_history(self) -> None:
+        today = datetime(2026, 8, 6)
+        today_key = f"{today.year:04d}-{today.month:02d}-{today.day:02d}"
         payload = {
             "data": {
                 "properties": [
@@ -55,6 +88,7 @@ class MetricsParsingTests(unittest.TestCase):
                         "timePoints": [
                             {"time": "2026-07", "value": 20.0},
                             {"time": "2026-08", "value": 10.0},
+                            {"time": today_key, "value": 3.0},
                         ],
                     },
                     {
@@ -62,22 +96,32 @@ class MetricsParsingTests(unittest.TestCase):
                         "timePoints": [
                             {"time": "2026-07", "value": 5.0},
                             {"time": "2026-08", "value": 2.0},
+                            {"time": today_key, "value": 1.0},
                         ],
                     },
                 ]
             }
         }
 
-        values = extract_history_metrics(payload, year=2026)
+        with patch.object(metrics_module, "datetime") as datetime_mock:
+            datetime_mock.now.return_value = today
+            values = extract_history_metrics(payload, year=2026)
 
+        self.assertEqual(values["daily_grid_import"], 3.0)
+        self.assertEqual(values["daily_grid_export"], 1.0)
+        self.assertEqual(values["daily_grid_net"], 2.0)
         self.assertEqual(values["monthly_pv_generated"], 50.0)
         self.assertEqual(values["monthly_grid_import"], 10.0)
+        self.assertEqual(values["monthly_grid_export"], 2.0)
+        self.assertEqual(values["monthly_grid_net"], 8.0)
         self.assertEqual(values["monthly_energy_sold"], 2.0)
         self.assertEqual(values["monthly_load_estimate"], 58.0)
         self.assertEqual(values["yearly_pv_generated"], 150.0)
-        self.assertEqual(values["yearly_grid_import"], 30.0)
-        self.assertEqual(values["yearly_energy_sold"], 7.0)
-        self.assertEqual(values["yearly_load_estimate"], 173.0)
+        self.assertEqual(values["yearly_grid_import"], 33.0)
+        self.assertEqual(values["yearly_grid_export"], 8.0)
+        self.assertEqual(values["yearly_grid_net"], 25.0)
+        self.assertEqual(values["yearly_energy_sold"], 8.0)
+        self.assertEqual(values["yearly_load_estimate"], 175.0)
 
 
 if __name__ == "__main__":

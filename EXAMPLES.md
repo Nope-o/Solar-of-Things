@@ -47,9 +47,30 @@ cards:
     unit: W
 ```
 
+### Live Power Graph
+
+This uses only native Home Assistant cards and focuses on the four live values
+that matter most for a quick system view.
+
+```yaml
+type: history-graph
+title: Live Power Flow
+hours_to_show: 6
+refresh_interval: 60
+entities:
+  - entity: sensor.solar_station_xxxxx_pv_input_power
+    name: PV
+  - entity: sensor.solar_station_xxxxx_grid_import_power
+    name: Grid
+  - entity: sensor.solar_station_xxxxx_load_power
+    name: Home Load
+  - entity: sensor.solar_station_xxxxx_battery_power
+    name: Battery
+```
+
 ### Power Flow Card (Custom Card Required)
 
-First install the Power Flow Card from HACS, then:
+For a visual layout closer to the mobile app, install a power-flow card from HACS, then:
 
 ```yaml
 type: custom:power-flow-card

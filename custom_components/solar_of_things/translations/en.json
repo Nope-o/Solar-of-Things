@@ -152,17 +152,41 @@
       "yearly_load_estimate": {
         "name": "Yearly Load Estimate"
       },
+      "daily_grid_import": {
+        "name": "Daily Grid Import"
+      },
+      "daily_grid_export": {
+        "name": "Daily Grid Export"
+      },
+      "daily_grid_net": {
+        "name": "Daily Grid Net"
+      },
       "monthly_pv_generated": {
         "name": "Monthly PV Generated"
       },
       "monthly_grid_import": {
         "name": "Monthly Grid Import"
       },
+      "monthly_grid_export": {
+        "name": "Monthly Grid Export"
+      },
+      "monthly_grid_net": {
+        "name": "Monthly Grid Net"
+      },
       "monthly_total_consumption": {
         "name": "Monthly Total Consumption"
       },
       "monthly_solar_percentage": {
         "name": "Monthly Solar Coverage"
+      },
+      "yearly_grid_import": {
+        "name": "Yearly Grid Import"
+      },
+      "yearly_grid_export": {
+        "name": "Yearly Grid Export"
+      },
+      "yearly_grid_net": {
+        "name": "Yearly Grid Net"
       }
     }
   }

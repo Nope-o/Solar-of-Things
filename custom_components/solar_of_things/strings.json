@@ -89,7 +89,15 @@
         "name": "Backup Mode (SBU Priority)"
       }
     },
+    "binary_sensor": {
+      "device_online": {
+        "name": "Online"
+      }
+    },
     "sensor": {
+      "current_generation_power": {
+        "name": "Current Generation Power"
+      },
       "pv_input_power": {
         "name": "PV Input Power"
       },
@@ -120,17 +128,65 @@
       "load_power": {
         "name": "Load Power"
       },
+      "device_online": {
+        "name": "Device Online"
+      },
+      "device_state": {
+        "name": "Device State"
+      },
+      "today_pv_generated": {
+        "name": "Today PV Generated"
+      },
+      "monthly_pv_generated_device": {
+        "name": "Monthly PV Generated"
+      },
+      "yearly_pv_generated": {
+        "name": "Yearly PV Generated"
+      },
+      "total_pv_generated": {
+        "name": "Total PV Generated"
+      },
+      "daily_grid_import": {
+        "name": "Daily Grid Import"
+      },
+      "daily_grid_export": {
+        "name": "Daily Grid Export"
+      },
+      "daily_grid_net": {
+        "name": "Daily Grid Net"
+      },
       "monthly_pv_generated": {
         "name": "Monthly PV Generated"
       },
       "monthly_grid_import": {
         "name": "Monthly Grid Import"
       },
+      "monthly_grid_export": {
+        "name": "Monthly Grid Export"
+      },
+      "monthly_grid_net": {
+        "name": "Monthly Grid Net"
+      },
       "monthly_total_consumption": {
         "name": "Monthly Total Consumption"
       },
       "monthly_solar_percentage": {
         "name": "Monthly Solar Coverage"
+      },
+      "monthly_load_estimate": {
+        "name": "Monthly Load Estimate"
+      },
+      "yearly_load_estimate": {
+        "name": "Yearly Load Estimate"
+      },
+      "yearly_grid_import": {
+        "name": "Yearly Grid Import"
+      },
+      "yearly_grid_export": {
+        "name": "Yearly Grid Export"
+      },
+      "yearly_grid_net": {
+        "name": "Yearly Grid Net"
       }
     }
   }

@@ -1,11 +1,20 @@
 """Test the Solar of Things config flow."""
+from typing import Any
 from unittest.mock import patch
 
 import pytest
-from homeassistant import config_entries, data_entry_flow
-from homeassistant.core import HomeAssistant
+try:
+    from homeassistant import config_entries, data_entry_flow
+    from homeassistant.core import HomeAssistant
+    HAS_HA = True
+except ImportError:
+    HAS_HA = False
+    HomeAssistant = Any  # type: ignore
 
 from custom_components.solar_of_things.const import DOMAIN
+
+
+@pytest.mark.skipif(not HAS_HA, reason="homeassistant package not installed in environment")
 
 
 async def test_form(hass: HomeAssistant) -> None:

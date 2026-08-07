@@ -1,8 +1,16 @@
 """Test configuration for Solar of Things integration."""
 import pytest
-from homeassistant.core import HomeAssistant
-from homeassistant.config_entries import ConfigEntry
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+try:
+    from homeassistant.core import HomeAssistant
+    from homeassistant.config_entries import ConfigEntry
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    HAS_HA = True
+except ImportError:
+    HAS_HA = False
+    HomeAssistant = None  # type: ignore
+    ConfigEntry = None  # type: ignore
+    MockConfigEntry = None  # type: ignore
 
 from custom_components.solar_of_things.const import DOMAIN
 

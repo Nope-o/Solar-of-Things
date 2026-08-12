@@ -46,6 +46,8 @@ from .const import (
     CONF_REFRESH_TOKEN,
     CONF_ACCESS_TOKEN_EXPIRES,
     CONF_REFRESH_TOKEN_EXPIRES,
+    CONF_SCAN_INTERVAL,
+    DEFAULT_SCAN_INTERVAL,
 )
 from .metrics import extract_device_metric_values
 
@@ -187,7 +189,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         model="Station",
     )
 
+    entry.async_on_unload(entry.add_update_listener(async_update_options))
+
     return True
+
+
+async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle options update."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -260,11 +269,12 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
         self._entry = entry
         self._settings_cache: dict[str, Any] = {}
         self._settings_cache_updated_at: datetime | None = None
+        scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
         super().__init__(
             hass,
             _LOGGER,
             name=f"{DOMAIN}_device_{device}",
-            update_interval=DEVICE_UPDATE_INTERVAL,
+            update_interval=timedelta(seconds=scan_interval),
         )
 
     async def _async_update_data(self) -> dict[str, Any]:

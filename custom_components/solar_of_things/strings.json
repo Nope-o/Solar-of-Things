@@ -189,5 +189,16 @@
         "name": "Yearly Grid Net"
       }
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Solar of Things Options",
+        "description": "Configure live telemetry update frequency (seconds).",
+        "data": {
+          "scan_interval": "Live Telemetry Refresh Interval (seconds)"
+        }
+      }
+    }
   }
 }

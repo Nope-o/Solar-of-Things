@@ -12,6 +12,10 @@ CONF_TIME_ZONE = "time_zone"
 CONF_USER_ID = "user_id"       # Siseli account / user-ID login (not email)
 CONF_PASSWORD = "password"
 
+# Options / polling configuration
+CONF_SCAN_INTERVAL = "scan_interval"
+DEFAULT_SCAN_INTERVAL = 5
+
 # Runtime-stored token state (written back to config entry)
 CONF_REFRESH_TOKEN = "refresh_token"
 CONF_ACCESS_TOKEN_EXPIRES = "access_token_expires"   # ISO-8601 string

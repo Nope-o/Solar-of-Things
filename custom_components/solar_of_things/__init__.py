@@ -283,6 +283,13 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
                 )
                 self._settings_cache = settings
                 self._settings_cache_updated_at = now
+            station_data = self.hass.data[DOMAIN].get(self._entry.entry_id, {})
+            station_coord = station_data.get("station_coordinator")
+            if station_coord and station_coord.data and isinstance(station_coord.data.get("devices"), list):
+                for dev in station_coord.data["devices"]:
+                    if str(dev.get("id")) == self.device_id:
+                        self.device_meta = dev
+                        break
             metrics = extract_device_metric_values(self.device_meta)
             return {
                 "time_series": time_series,

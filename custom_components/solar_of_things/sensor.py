@@ -171,17 +171,16 @@ class SolarOfThingsDeviceSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self):
-        device_metrics = (self.coordinator.data or {}).get("device_metrics") or {}
+        data = self.coordinator.data or {}
+        device_metrics = data.get("device_metrics") or {}
+        monthly = data.get("monthly") or {}
+        ts = data.get("time_series") or {}
+
         if self._sensor_key == "device_online":
             return device_metrics.get("online")
         if self._sensor_key == "device_state":
             return device_metrics.get("device_state")
-        if self._sensor_key == "current_generation_power":
-            val = device_metrics.get("current_generation_power_w")
-            if val is not None:
-                return round(float(val), 2)
 
-        monthly = (self.coordinator.data or {}).get("monthly") or {}
         if self._sensor_key in monthly:
             val = monthly.get(self._sensor_key)
             if val is not None:
@@ -191,14 +190,6 @@ class SolarOfThingsDeviceSensor(CoordinatorEntity, SensorEntity):
             val = device_metrics.get("today_pv_generated_kwh")
             if val is not None:
                 return round(float(val), 2)
-        if self._sensor_key == "batterySOC":
-            # Prefer device-reported SOC if present
-            val = device_metrics.get("battery_soc_percent")
-            if val is not None:
-                try:
-                    return round(float(val), 1)
-                except Exception:
-                    return None
         if self._sensor_key == "monthly_pv_generated_device":
             val = device_metrics.get("monthly_pv_generated_kwh")
             if val is not None:
@@ -212,31 +203,31 @@ class SolarOfThingsDeviceSensor(CoordinatorEntity, SensorEntity):
             if val is not None:
                 return round(float(val), 2)
 
-        if self._sensor_key == "batteryVoltage":
-            # Prefer device metric voltage (V) if available, else time-series
-            val = device_metrics.get("battery_voltage_v")
-            if val is not None:
-                try:
-                    return round(float(val), 1)
-                except Exception:
-                    return None
-
-        ts = (self.coordinator.data or {}).get("time_series") or {}
+        # ── Live 15-second telemetry sensors ─────────────────────────────────
+        # Always check the live time_series data FIRST so sensors update every 15s.
         val = ts.get(self._sensor_key)
+
         if val is None:
-            if self._sensor_key == "pvInputPower":
-                val = device_metrics.get("pv_input_power_w")
-            elif self._sensor_key == "loadPower":
-                val = device_metrics.get("load_power_w")
+            if self._sensor_key == "current_generation_power":
+                val = ts.get("pvInputPower") or device_metrics.get("current_generation_power_w") or device_metrics.get("pv_input_power_w")
+            elif self._sensor_key == "pvInputPower":
+                val = ts.get("current_generation_power") or device_metrics.get("pv_input_power_w") or device_metrics.get("current_generation_power_w")
+            elif self._sensor_key in ("loadPower", "acOutputActivePower"):
+                val = ts.get("loadPower") or ts.get("acOutputActivePower") or device_metrics.get("load_power_w")
             elif self._sensor_key == "gridPower":
                 val = device_metrics.get("grid_power_w")
-            if val is None:
-                return None
+            elif self._sensor_key == "feedInPower":
+                val = ts.get("feedInPower") or device_metrics.get("grid_power_w")
+            elif self._sensor_key == "batteryVoltage":
+                val = device_metrics.get("battery_voltage_v")
+            elif self._sensor_key == "batterySOC":
+                val = device_metrics.get("battery_soc_percent")
+
+        if val is None:
+            return None
+
         try:
-            # Use 1 decimal for voltage, 2 decimals otherwise
-            if self._sensor_key == "batteryVoltage":
-                return round(float(val), 1)
-            if self._sensor_key == "batterySOC":
+            if self._sensor_key in ("batteryVoltage", "batterySOC"):
                 return round(float(val), 1)
             return round(float(val), 2)
         except Exception:

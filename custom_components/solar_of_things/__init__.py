@@ -53,7 +53,7 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.NUMBER, Platform.SELECT, Platform.SWITCH, Platform.BINARY_SENSOR]
 
-DEVICE_UPDATE_INTERVAL = timedelta(seconds=15)
+DEVICE_UPDATE_INTERVAL = timedelta(seconds=5)
 STATION_UPDATE_INTERVAL = timedelta(minutes=5)
 SETTINGS_REFRESH_INTERVAL = timedelta(minutes=5)
 

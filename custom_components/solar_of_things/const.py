@@ -68,6 +68,9 @@ SENSOR_KEYS = [
     "batterySOC",
     "gridPower",
     "loadPower",
+    "pvTemperature",
+    "inverterTemperature",
+    "transformerTemperature",
 ]
 
 SENSOR_DEFINITIONS = {
@@ -136,6 +139,24 @@ SENSOR_DEFINITIONS = {
         "unit": "W",
         "device_class": "power",
         "icon": "mdi:home-lightning-bolt",
+    },
+    "pvTemperature": {
+        "name": "PV Temperature",
+        "unit": "°C",
+        "device_class": "temperature",
+        "icon": "mdi:thermometer-solar",
+    },
+    "inverterTemperature": {
+        "name": "Inverter Temperature",
+        "unit": "°C",
+        "device_class": "temperature",
+        "icon": "mdi:thermometer",
+    },
+    "transformerTemperature": {
+        "name": "Transformer Temperature",
+        "unit": "°C",
+        "device_class": "temperature",
+        "icon": "mdi:thermometer",
     },
     "device_online": {
         "name": "Device Online",

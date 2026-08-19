@@ -166,6 +166,9 @@ class ApiParsingTests(unittest.TestCase):
                         "batteryDischargeCurrent": {"unit": "A", "value": 0},
                         "batteryCapacity": {"unit": "%", "value": 100},
                         "bmsCurrentSOC": {"unit": "%", "value": 0},
+                        "pvTemperature": {"unit": "°C", "value": 28},
+                        "inverterTemperature": {"unit": "°C", "value": 38},
+                        "transformerTemperature": {"unit": "°C", "value": 32},
                     }
                 },
             }
@@ -181,3 +184,6 @@ class ApiParsingTests(unittest.TestCase):
         self.assertEqual(values["batteryChargingCurrent"], 0.0)
         self.assertEqual(values["batteryDischargeCurrent"], 0.0)
         self.assertEqual(values["batterySOC"], 100.0)
+        self.assertEqual(values["pvTemperature"], 28.0)
+        self.assertEqual(values["inverterTemperature"], 38.0)
+        self.assertEqual(values["transformerTemperature"], 32.0)

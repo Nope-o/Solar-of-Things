@@ -7,6 +7,7 @@ from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, Sen
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     PERCENTAGE,
+    UnitOfTemperature,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
@@ -33,6 +34,9 @@ _TRANSLATION_KEYS: dict[str, str] = {
     "feedInPower": "feed_in_power",
     "gridPower": "grid_power",
     "loadPower": "load_power",
+    "pvTemperature": "pv_temperature",
+    "inverterTemperature": "inverter_temperature",
+    "transformerTemperature": "transformer_temperature",
     "daily_grid_import": "daily_grid_import",
     "daily_grid_export": "daily_grid_export",
     "daily_grid_net": "daily_grid_net",
@@ -153,6 +157,10 @@ class SolarOfThingsDeviceSensor(CoordinatorEntity, SensorEntity):
             self._attr_device_class = SensorDeviceClass.VOLTAGE
             self._attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
             self._attr_state_class = SensorStateClass.MEASUREMENT
+        elif unit == "°C":
+            self._attr_device_class = SensorDeviceClass.TEMPERATURE
+            self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+            self._attr_state_class = SensorStateClass.MEASUREMENT
         elif unit == "%":
             if "battery" in sensor_key.lower():
                 self._attr_device_class = SensorDeviceClass.BATTERY
@@ -272,6 +280,12 @@ class SolarOfThingsDeviceSensor(CoordinatorEntity, SensorEntity):
             if device_metrics.get("battery_soc_percent") is not None:
                 return True
             return ts.get("batterySOC") is not None
+        if self._sensor_key in (
+            "pvTemperature",
+            "inverterTemperature",
+            "transformerTemperature",
+        ):
+            return ts.get(self._sensor_key) is not None
 
         # Monthly/station-derived sensors
         if self._sensor_key in monthly:

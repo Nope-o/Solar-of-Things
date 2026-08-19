@@ -328,6 +328,9 @@ def _extract_state_field_values(fields: dict[str, Any]) -> dict[str, Any]:
         ("pvPower", "pvInputPower"),
         ("mainsPower", "gridPower"),
         ("outputActivePower", "loadPower"),
+        ("pvTemperature", "pvTemperature"),
+        ("inverterTemperature", "inverterTemperature"),
+        ("transformerTemperature", "transformerTemperature"),
     )
     for field_key, target_key in field_mappings:
         numeric = _extract_unit_value(fields.get(field_key))
@@ -835,6 +838,9 @@ class SolarOfThingsAPI:
             "batterySOC",
             "gridPower",
             "loadPower",
+            "pvTemperature",
+            "inverterTemperature",
+            "transformerTemperature",
         )
 
         try:
@@ -867,6 +873,9 @@ class SolarOfThingsAPI:
             "batteryVoltage",
             "feedInPower",
             "batterySOC",
+            "pvTemperature",
+            "inverterTemperature",
+            "transformerTemperature",
         ]
 
         if any(key not in latest_values for key in core_live_keys):
